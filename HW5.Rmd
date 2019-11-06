@@ -3,8 +3,10 @@ title: 'Machine Learning 2019: Tree-Based Methods'
 author: "Sonali Narang"
 date: "10/28/2019"
 output:
-  pdf_document: default
+  html_document:
+    df_print: paged
   pdf: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -22,7 +24,7 @@ library(tree)
 library(randomForest)
 library(MASS)
 library(gbm)
-
+library(rpart)
 ```
 ## The Carseats Dataset 
 
@@ -193,10 +195,75 @@ abline(h = min(test.err), col = "red")
 ```
 
 ## Homework
+1. Attempt a regression tree-based method (not covered in this tutorial) on a reasonable dataset of your choice. Explain the results.
 
-1. Attempt a regression tree-based method (not covered in this tutorial) on a reasonable dataset of your choice. Explain the results. 
+```{r}
+data("Carseats")
+Carseats <- na.omit(Carseats)
+Carseats
+head(Carseats)
+```
+
+I used the carseats dataset for both questions.
+
+```{r}
+
+set.seed(1)
+train = sample(1:nrow(Carseats), 350)
+
+#grow tree
+fit <- rpart(Sales~., subset = train, method="anova", data=Carseats)
+
+printcp(fit) 
+summary(fit) 
+
+# plot tree 
+plot(fit, uniform=TRUE, main="Regression Tree for Sales ")
+text(fit, use.n=TRUE, all=TRUE, cex=.5)
+
+```
+
+A regression tree was plotted for the carseats dataset with sales as the response variable and the other variables as input variables. The relevant variables of the tree are ShelveLoc, Price, CompPrice, Advertising and Age. 
 
 2. Attempt both a bagging and boosting method on a reasonable dataset of your choice. Explain the results.
 
+Bagging
+```{r}
 
+rf.o = randomForest(Sales~., data = Carseats, subset = train)
+rf.o
 
+oob.err = double(10)
+test.err = double(10)
+
+for(mtry in 1:10){
+  fit = randomForest(Sales~., data = Carseats, subset=train, mtry=mtry, ntree = 250)
+  oob.err[mtry] = fit$mse[250] 
+  pred = predict(fit, Carseats[-train,]) 
+  test.err[mtry] = with(Carseats[-train,], mean( (Sales-pred)^2 )) 
+}
+matplot(1:mtry, cbind(test.err, oob.err), pch = 23, col = c("red", "blue"), type = "b", ylab="Mean Squared Error")
+legend("topright", legend = c("OOB", "Test"), pch = 23, col = c("red", "blue"))
+```
+
+As seen in the plot above, for both the testing and training sets, the error reduces as the number of mtry increases. However, the training error seems to be less than the test error the whole time. 
+
+Boosting
+```{r}
+boost.Carseats = gbm(Sales~., data = Carseats[train,], distribution = "gaussian", n.trees = 10000, shrinkage = 0.01, interaction.depth = 4)
+
+summary(boost.Carseats)
+
+plot(boost.Carseats,i="Price")
+plot(boost.Carseats,i="CompPrice")
+
+n.trees = seq(from = 100, to = 10000, by = 100)
+predmat = predict(boost.Carseats, newdata = Carseats[-train,], n.trees = n.trees)
+dim(predmat)
+
+boost.err1 = with(Carseats[-train,], apply( (predmat- Sales)^2, 2, mean) )
+plot(n.trees, boost.err1, pch = 23, ylab = "Mean Squared Error", xlab = "# Trees", main = "Boosting Test Error")
+abline(h = min(test.err), col = "red")
+```
+
+As seen in the plot above, the mean squared error reduces with the number of trees increases. The error reaches a minimum at about 1000 trees. Then it increases and comes to a level at last.
